@@ -110,3 +110,5 @@ try:
     c.record("test", -1, 100)
 except ValueError as e:
     print("捕获:", e)
+
+# 第 2 周复习：这个类用于统计 Agent 的 token 消耗
