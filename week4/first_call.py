@@ -1,3 +1,4 @@
+from cost_tracker import CostTracker
 import os                           # 标准库，用来读取环境变量
 import httpx
 import json
@@ -10,14 +11,12 @@ key = os.getenv("DEEPSEEK_API_KEY") # 按名字取值，取不到返回 None
 if not key:
     raise ValueError("未找到 DEEPSEEK_API_KEY，请检查项目根目录下的 .env 文件")
 
-print(len(key))
 
 headers = {
     "Content-Type": "application/json",
     "Authorization":f"Bearer {key}"
 }
 
-print(headers["Authorization"][:10])
 
 url = "https://api.deepseek.com/v1/chat/completions"
 
@@ -29,7 +28,8 @@ payload = {
     "max_tokens":200,
     "thinking": {"type": "disabled"}
 }
-print(payload)
+
+tracker = CostTracker()     # 括号表示调用，这一步会执行 __init__
 
 try:
     response = httpx.post(
@@ -62,12 +62,6 @@ finish_reason = data["choices"][0]["finish_reason"]
 print(finish_reason)
 
 usage = data["usage"]    # 先拿到整个 usage 字典
-prompt = usage["prompt_tokens"]
-print(prompt)
-completion = usage["completion_tokens"]
-print(completion)
-total = usage["total_tokens"]
-print(total)
 
-cost = prompt/1000000*0.15 +completion/1000000*0.6
-print(f"本次花费: ${cost:.6f}")
+tracker.record("deepseek-flash", usage)
+tracker.report()
