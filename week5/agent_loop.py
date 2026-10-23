@@ -23,7 +23,7 @@ tracker = CostTracker()  # 括号表示调用，这一步会执行 __init__
 def get_weather(location):
     weather_data = {"北京":"12℃","上海":"18℃","广州":"26℃"}
     if location not in weather_data:
-        return "未查到该城市的天气"
+        return "未查到该城市的天气,只可以查询以下城市的天气['北京','上海','广州']"
     return weather_data[location]
 
 def calculate(a,b,operation):
@@ -149,10 +149,24 @@ def run_agent(question):
             return message["content"]
 
         for tool_call in message["tool_calls"]:
-            name = tool_call["function"]["name"]
-            args = json.loads(tool_call["function"]["arguments"])
             call_id = tool_call["id"]
-            result = tool_map[name](**args)
+            name = tool_call["function"]["name"]
+            args = tool_call["function"]["arguments"]
+
+            try:
+                if name not in tool_map:
+                    result = f"错误：不存在名为{name}的工具"
+                else:
+                    args = json.loads(tool_call["function"]["arguments"])
+                    result = tool_map[name](**args)
+            except json.JSONDecodeError:
+                    result = "错误：参数不是合法的 JSON"
+            except TypeError as e:
+                result = f"错误：参数不正确（{e}）"
+            except Exception as e:
+                print(f"[开发者日志] 工具 {name} 发生未预期的异常：{type(e).__name__}: {e}")
+                result = f"错误：工具执行失败（{e}）"
+
             print(f"[第{round_num}轮] {name}({args}) → {result}")
 
             messages.append({
