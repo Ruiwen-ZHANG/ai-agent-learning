@@ -1,8 +1,7 @@
-from cost_tracker import CostTracker
+from common.cost_tracker import CostTracker
 import os                           # 标准库，用来读取环境变量
 import httpx
 import json
-import sys
 import time
 from dotenv import load_dotenv      # 第三方库，负责把 .env 的内容加载进环境变量
 

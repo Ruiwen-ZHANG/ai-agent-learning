@@ -2,7 +2,7 @@ import httpx
 import os
 import sys
 from dotenv import load_dotenv      # 第三方库，负责把 .env 的内容加载进环境变量
-from cost_tracker import CostTracker
+from common.cost_tracker import CostTracker
 
 load_dotenv()                       # 执行加载，这一行必须在 getenv 之前
 key = os.getenv("DEEPSEEK_API_KEY") # 按名字取值，取不到返回 None
