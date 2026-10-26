@@ -1,4 +1,7 @@
 from pathlib import Path   # pathlib：用"对象"的方式处理路径，比拼字符串可靠
+from pathlib import Path
+
+MAX_CHARS = 450   # 每块正文的字数上限；加上标题路径约几十字，总长控制在 500 左右
 
 def make_chunk(path,lines,source):
     body = "\n".join(lines).strip()  # 拼接并去掉首尾空白，只做一次
@@ -6,10 +9,65 @@ def make_chunk(path,lines,source):
         return None
     else:
         return {
-            "text": " > ".join(path) + "\n" + body,
+            "text": source + " > " + " > ".join(path) + "\n" + body,   # 文件名放在最前面，补上被章节标题覆盖的文档标题
             "source": source,
             "heading": path[-1] if path else "",
         }
+
+def split_paragraphs(lines):
+    """把一节的行按空行拆成段落；代码块内部的空行不拆"""
+    in_code = False      # 这个函数自己的"引号模式"开关
+    para = []            # 当前段落：正在积累的行
+    paras = []           # 所有段落：每个元素是一个段落（行列表）
+
+    for line in lines:
+        # 遇到 ``` 切换开关，这一行属于当前段落
+        if line.lstrip().startswith("```"):
+            in_code = not in_code
+            para.append(line)
+            continue
+
+        # 不在代码块里的空行：当前段落结束
+        if not in_code and line.strip() == "":
+            if para:                # 当前段落有内容才保存（连续两个空行时 para 是空的）
+                paras.append(para)
+            para = []               # 开始新段落
+            continue                # 空行本身不保留
+
+        # 其他行（正文，或者代码块内部的任何行，包括空行）：加进当前段落
+        para.append(line)
+
+    # 循环结束：最后一个段落后面可能没有空行，要手动保存
+    if para:
+        paras.append(para)
+
+    return paras
+
+def pack(paras, max_chars):
+    """把段落依次装进卡片，每张不超过 max_chars 字；单段超长就独占一张"""
+    groups = []      # 结果：每个元素是一张卡片的所有行
+    group = []       # 当前卡片
+    size = 0         # 当前卡片已有的字数
+
+    for para in paras:
+        para_size = len("\n".join(para))     # 这一段的字数（把行拼回文本再数）
+
+        # 当前卡片已经有内容，并且再加这一段就超了：换一张新卡片
+        if group and size + para_size > max_chars:
+            groups.append(group)
+            group = []
+            size = 0
+
+        # 这一段装进当前卡片
+        group.extend(para)      # extend：把这段的行逐个加进去
+        group.append("")        # 段落之间补回一个空行，保持 Markdown 格式
+        size += para_size
+
+    # 最后一张卡片
+    if group:
+        groups.append(group)
+
+    return groups
 
 def chunk_markdown(text, source):
     in_code = False
@@ -29,19 +87,24 @@ def chunk_markdown(text, source):
             level = len(line) - len(stripped)  # 去掉了几个 #，就是几级标题 → 2
             title = stripped.strip()  # 去掉空格 → "6.1 错误"
 
-            chunk = make_chunk(path, buf, source)
-            if chunk is not None:
-                chunks.append(chunk)
+            # 先把这一节拆成段落，再装成卡片；一节可能变成好几块，标题路径都相同
+            for group in pack(split_paragraphs(buf), MAX_CHARS):
+                chunk = make_chunk(path, group, source)
+                if chunk is not None:
+                    chunks.append(chunk)
             buf = []
 
             path = path[:level - 1] + [title]
             continue
+        if not in_code and line.strip() == "---":
+            continue
 
         buf.append(line)
 
-    chunk = make_chunk(path, buf, source)
-    if chunk is not None:
-        chunks.append(chunk)
+    for group in pack(split_paragraphs(buf), MAX_CHARS):
+        chunk = make_chunk(path, group, source)
+        if chunk is not None:
+            chunks.append(chunk)
     return chunks
 
 if __name__ == "__main__":
