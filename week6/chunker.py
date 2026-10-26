@@ -107,6 +107,14 @@ def chunk_markdown(text, source):
             chunks.append(chunk)
     return chunks
 
+def load_all_chunks(root):
+    """读取 root 目录下所有 week*.md 笔记，切块后合并返回"""
+    all_chunks = []
+    for f in sorted(root.glob("week*.md")):
+        text = f.read_text(encoding="utf-8")
+        all_chunks.extend(chunk_markdown(text, f.name))
+    return all_chunks
+
 if __name__ == "__main__":
     root = Path(__file__).parent.parent        # __file__ 是 chunker.py 本身；parent 是 week6/，再一个 parent 是项目根目录
     md_files = sorted(root.glob("week*.md"))   # 匹配所有 week 开头、.md 结尾的文件，排序后按周次顺序处理
