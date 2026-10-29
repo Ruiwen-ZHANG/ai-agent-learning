@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 import json
 import httpx
 import sys
+import time
 
 from week7.search import hybrid_search             # §4 写的检索函数
 from common.cost_tracker import CostTracker # 第 4 周写、本周升级的计费器
@@ -38,7 +39,7 @@ def build_context(hits):
         readings.append(reading)
     return "\n\n".join(readings)
 
-def ask_llm(messages):
+def ask_llm(messages, json_mode=False):
 
     payload = {
         "model": MODEL,
@@ -47,25 +48,22 @@ def ask_llm(messages):
         "max_tokens": 1000,
         "thinking": {"type": "disabled"},
     }
+    if json_mode:
+        payload["response_format"] = {"type": "json_object"}
 
-    try:
-        response = httpx.post(
-            url,  # 第一个参数是地址
-            headers=headers,  # 请求头字典
-            json=payload,  # 请求体，用 json= 参数
-            timeout=30,
-        )
-    except httpx.TimeoutException as e:
-        print("超时了:", e)
-        sys.exit(1)
-    except httpx.RequestError as e:
-        print("网络错误：", e)
-        sys.exit(1)
+    for attempt in range(3):  # 最多试 3 次
+        try:
+            response = httpx.post(url, headers=headers, json=payload, timeout=30)
+            break  # 成功了就跳出循环，不再重试
+        except (httpx.TimeoutException, httpx.RequestError) as e:  # 超时和网络错误都重试
+            if attempt == 2:  # 已经是第 3 次了，还失败
+                raise  # 把错误抛给调用方，让它决定怎么办
+            wait = 2 ** attempt  # 1 秒、2 秒、4 秒……
+            print(f"网络错误，{wait} 秒后重试（第 {attempt + 1} 次）：{e}")
+            time.sleep(wait)
 
     if response.status_code != 200:
-        print(response.status_code)  # 先看状态码
-        print(response.text)
-        sys.exit(1)
+        raise RuntimeError(f"API 返回 {response.status_code}：{response.text[:200]}")
 
     # print(json.dumps(response.json(), indent=2, ensure_ascii=False))
 

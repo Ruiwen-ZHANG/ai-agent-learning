@@ -26,6 +26,15 @@ def clean_text(text):
     text = re.sub(r'^\[(\d+)\]', r'文献\1.', text, flags=re.MULTILINE)
     return text
 
+def update_fence(line, fence):
+    """根据这一行更新代码块状态。fence 是当前代码块开头的反引号个数，0 表示不在代码块里"""
+    s = line.strip()
+    n = len(s) - len(s.lstrip("`"))             # 这一行开头有几个连续的反引号
+    if fence == 0 and n >= 3:                   # 不在代码块里，遇到 3 个以上的反引号：代码块开始
+        return n
+    if fence and n >= fence and s == "`" * n:   # 在代码块里，整行只有反引号且个数不少于开头：代码块结束
+        return 0
+    return fence                                # 其他情况：状态不变
 
 def make_chunk(path,lines,source):
     body = "\n".join(lines).strip()  # 拼接并去掉首尾空白，只做一次
@@ -40,19 +49,19 @@ def make_chunk(path,lines,source):
 
 def split_paragraphs(lines):
     """把一节的行按空行拆成段落；代码块内部的空行不拆"""
-    in_code = False      # 这个函数自己的"引号模式"开关
+    fence = 0
     para = []            # 当前段落：正在积累的行
     paras = []           # 所有段落：每个元素是一个段落（行列表）
 
     for line in lines:
-        # 遇到 ``` 切换开关，这一行属于当前段落
-        if line.lstrip().startswith("```"):
-            in_code = not in_code
-            para.append(line)
+        new_fence = update_fence(line, fence)
+        if new_fence != fence:  # 状态变了，说明这一行是代码块的开头或结尾
+            fence = new_fence
+            para.append(line)  # split_paragraphs 里是 para.append(line)
             continue
 
         # 不在代码块里的空行：当前段落结束
-        if not in_code and line.strip() == "":
+        if not fence and line.strip() == "":
             if para:                # 当前段落有内容才保存（连续两个空行时 para 是空的）
                 paras.append(para)
             para = []               # 开始新段落
@@ -134,20 +143,21 @@ def pack(paras, max_chars):
 
 def chunk_markdown(text, source):
     text = clean_text(text)
-    in_code = False
+    fence = 0
     path = []
     buf = []
     chunks = []
 
     lines = text.splitlines()
     for line in lines:
-        if line.startswith("```"):
-            in_code = not in_code
-            buf.append(line)
+        new_fence = update_fence(line, fence)
+        if new_fence != fence:  # 状态变了，说明这一行是代码块的开头或结尾
+            fence = new_fence
+            buf.append(line)  # split_paragraphs 里是 para.append(line)
             continue
 
         stripped = line.lstrip("#")
-        if not in_code and line.startswith("#") and stripped.startswith(" "):
+        if not fence and line.startswith("#") and stripped.startswith(" "):
             level = len(line) - len(stripped)  # 去掉了几个 #，就是几级标题 → 2
             title = stripped.strip()  # 去掉空格 → "6.1 错误"
 
@@ -160,7 +170,7 @@ def chunk_markdown(text, source):
 
             path = path[:level - 1] + [title]
             continue
-        if not in_code and line.strip() == "---":
+        if not fence and line.strip() == "---":
             continue
 
         buf.append(line)
