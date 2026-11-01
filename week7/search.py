@@ -12,7 +12,9 @@ DB_DIR = ROOT / "chroma_db"
 
 model = SentenceTransformer("BAAI/bge-small-zh-v1.5")
 client = chromadb.PersistentClient(path=str(DB_DIR))
-col = client.get_collection("notes")
+COLLECTION = "hello_agents"                  # 和 build_index.py 里的集合名一致
+
+col = client.get_collection(COLLECTION)
 
 def search(query, k=3):
     query_vec = model.encode([query], normalize_embeddings=True)

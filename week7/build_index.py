@@ -23,11 +23,11 @@ print(f"向量形状：{embeddings.shape}")
 
 client = chromadb.PersistentClient(path=str(DB_DIR))   # 连接硬盘上的数据库文件夹，不存在就自动创建；path 要传字符串
 try:
-    client.delete_collection("COLLECTION")     # 删除旧集合
+    client.delete_collection(COLLECTION)     # 删除旧集合
 except Exception:                          # 第一次运行时集合还不存在，删除会报错，忽略即可
     pass
 col = client.create_collection(
-    name="COLLECTION",                                      # 集合的名字，查询时用同一个名字打开
+    name=COLLECTION,                                      # 集合的名字，查询时用同一个名字打开
     metadata={"hnsw:space": "cosine"},                 # 用余弦距离（不写的话默认是 L2 欧氏距离）
 )
 
