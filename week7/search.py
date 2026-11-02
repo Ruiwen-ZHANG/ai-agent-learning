@@ -17,6 +17,9 @@ ROOT = Path(__file__).parent.parent        # __file__ 是 search_index.py 本身
 DB_DIR = ROOT / "chroma_db"
 
 model = SentenceTransformer("BAAI/bge-small-zh-v1.5")
+from sentence_transformers import CrossEncoder      # 交叉编码器（这一行可以放到文件开头的 import 里）
+
+reranker = CrossEncoder("BAAI/bge-reranker-base", max_length=512)   # 问题+块拼起来最多读 512 个 token
 client = chromadb.PersistentClient(path=str(DB_DIR))
 COLLECTION = "hello_agents"                  # 和 build_index.py 里的集合名一致
 
@@ -108,6 +111,24 @@ def rrf_search(question, k=10, pool=20, w_sem=1.0, w_bm25=1.0):
 
     top_ids = sorted(rrf, key=rrf.get, reverse=True)[:k]                  # 按 RRF 分数从高到低取前 k
     return [{**by_id[i], "score": rrf[i], "via": "RRF"} for i in top_ids]
+
+def candidates(question, pool=20):
+    """召回：BM25 前 pool 块 + 语义前 pool 块，按 id 去重后合并（并集）"""
+    seen = set()
+    result = []
+    for h in bm25_search(question, pool) + search(question, pool):   # 两个列表用 + 拼起来，BM25 的在前
+        if h["id"] not in seen:                                     # 两路都找到的块只保留一次
+            seen.add(h["id"])
+            result.append(h)
+    return result
+
+def rerank_search(question, k=10, pool=20):
+    """两阶段检索：先召回并集，再用 reranker 给每一块打分，取前 k"""
+    cands = candidates(question, pool)
+    pairs = [(question, h["text"]) for h in cands]           # 每一块和问题配成一对
+    scores = reranker.predict(pairs, batch_size=16)          # 每一对得到一个相关度分数
+    order = scores.argsort()[::-1][:k]                       # 分数从高到低，取前 k 个的下标
+    return [{**cands[i], "score": float(scores[i]), "via": "rerank"} for i in order]
 
 if __name__ == "__main__":
     while True:
