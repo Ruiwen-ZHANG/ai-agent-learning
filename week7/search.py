@@ -1,11 +1,17 @@
-import re
 import os
+import re
+import jieba                          # 中文分词
+from rank_bm25 import BM25Okapi       # BM25 打分；Okapi 是 BM25 最常用的那个版本
 os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
 os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
 
 from pathlib import Path
 import chromadb
 from sentence_transformers import SentenceTransformer
+
+def tokenize(text):
+    """中文分词（搜索引擎模式），转小写，去掉标点和空白"""
+    return [w.lower() for w in jieba.lcut_for_search(text) if re.search(r"\w", w)]
 
 ROOT = Path(__file__).parent.parent        # __file__ 是 search_index.py 本身；parent 是 week7/，再一个 parent 是项目根目录
 DB_DIR = ROOT / "chroma_db"
@@ -15,6 +21,14 @@ client = chromadb.PersistentClient(path=str(DB_DIR))
 COLLECTION = "hello_agents"                  # 和 build_index.py 里的集合名一致
 
 col = client.get_collection(COLLECTION)
+
+# 从 Chroma 里取出全部块，不用重新切块，保证和向量库里的块完全一致
+_all = col.get(include=["documents", "metadatas"])
+BM25_IDS = _all["ids"]
+BM25_DOCS = _all["documents"]
+BM25_METAS = _all["metadatas"]
+bm25 = BM25Okapi([tokenize(d) for d in BM25_DOCS])    # 每块分词后交给 BM25 建索引
+
 
 def search(query, k=3):
     query_vec = model.encode([query], normalize_embeddings=True)
@@ -65,6 +79,35 @@ def hybrid_search(question, k=3):
                 hits.append(h)
                 seen.add(h["id"])
     return hits
+
+def bm25_search(query, k=10):
+    """BM25 关键词检索，返回分数最高的 k 块（格式和 search 一致）"""
+    scores = bm25.get_scores(tokenize(query))       # 问题对每一块的 BM25 分数，numpy 数组，长度 2505
+    top = scores.argsort()[::-1][:k]                # 从高到低排序后，取前 k 个的下标
+    hits = []
+    for i in top:
+        hits.append({
+            "id": BM25_IDS[i],
+            "text": BM25_DOCS[i],
+            "source": BM25_METAS[i]["source"],
+            "heading": BM25_METAS[i]["heading"],
+            "score": float(scores[i]),              # numpy 的数字转成普通 float
+            "via": "BM25",
+        })
+    return hits
+
+def rrf_search(question, k=10, pool=20, w_sem=1.0, w_bm25=1.0):
+    """语义检索 + BM25 各取 pool 块，用加权 RRF 融合，返回前 k 块"""
+    rrf = {}
+    by_id = {}
+    # 每一路带上自己的权重
+    for w, hits in ((w_sem, search(question, pool)), (w_bm25, bm25_search(question, pool))):
+        for rank, h in enumerate(hits, 1):
+            rrf[h["id"]] = rrf.get(h["id"], 0) + w / (60 + rank)    # 原来是 1 /，现在是 w /
+            by_id.setdefault(h["id"], h)
+
+    top_ids = sorted(rrf, key=rrf.get, reverse=True)[:k]                  # 按 RRF 分数从高到低取前 k
+    return [{**by_id[i], "score": rrf[i], "via": "RRF"} for i in top_ids]
 
 if __name__ == "__main__":
     while True:

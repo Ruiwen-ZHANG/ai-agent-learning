@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from week7.search import search                  # 要评测的检索函数
+from week7.search import search, bm25_search, rrf_search                 # 要评测的检索函数
 from week7.chunker import load_all_chunks        # 可达性检查要用当前的切块
 
 ROOT = Path(__file__).parent.parent
@@ -43,13 +43,23 @@ if __name__ == "__main__":
             print(f"不可达：{it['id']} {it['evidence'][:30]}")
     print(f"dev 共 {len(dev)} 题，可达 {len(reachable)} 题")
 
-    metrics, ranks = evaluate(search, reachable, K)
-    print("语义检索（baseline）：")
-    for name, value in metrics.items():
-        print(f"  {name}: {value:.1%}")  # :.1% → 百分比，保留 1 位小数
+    # 三种检索方法依次评测；evaluate 不用改，把不同的检索函数传进去就行
+    methods = {
+        "语义": search,
+        "BM25": bm25_search,
+        "RRF 1:1": rrf_search,
+        "RRF 1:2": lambda q, k: rrf_search(q, k, w_bm25=2),  # BM25 权重是语义的 2 倍
+        "RRF 1:3": lambda q, k: rrf_search(q, k, w_bm25=3),
+    }
+    all_ranks = {}  # 记下每种方法每题的排名，后面对比用
+    for name, fn in methods.items():
+        metrics, ranks = evaluate(fn, reachable, K)
+        all_ranks[name] = ranks
+        line = "  ".join(f"{m} {v:.1%}" for m, v in metrics.items())  # 5 个指标拼成一行
+        print(f"{name:6s} {line}")  # :6s 让方法名占 6 格，几行对齐
 
-    # 没进前 10 的题：bad case 分析的素材
-    print("没找到的题：")
-    for it, r in zip(reachable, ranks):
+    # RRF 仍然没进前 10 的题：bad case 分析的素材
+    print("BM25 没找到的题：")
+    for it, r in zip(reachable, all_ranks["BM25"]):
         if r is None:
             print(f"  {it['id']} | {it['question']}")
