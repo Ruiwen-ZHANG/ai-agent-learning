@@ -7,7 +7,7 @@ import httpx
 import sys
 import time
 
-from week7.search import hybrid_search             # §4 写的检索函数
+from week7.search import rerank_search      # 第 7 周评测最好的检索：并集召回 + 重排
 from common.cost_tracker import CostTracker # 第 4 周写、本周升级的计费器
 
 load_dotenv()                               # 从 .env 读取 API Key
@@ -83,7 +83,7 @@ def check_citations(answer,n):
     return sorted(set(bad))
 
 def rag(question,tracker):
-    hits = hybrid_search(question,k=3)
+    hits = rerank_search(question,k=3)
     context = build_context(hits)
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},

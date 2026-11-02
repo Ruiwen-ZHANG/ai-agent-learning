@@ -1,4 +1,5 @@
 import json
+import time
 from pathlib import Path
 
 from week7.search import search, bm25_search, rrf_search, rerank_search, candidates                 # 要评测的检索函数
@@ -78,8 +79,27 @@ if __name__ == "__main__":
         if r is None or r > 3:  # 没找到，或者排在第 4 名以后
             print(f"  {it['id']} | 排名 {r} | {it['question']}")"""
 
-    # 严格规则 vs 同节规则：同一节被切成几块时，别的块也能回答问题，严格规则会误判
-    for label, sec in [("重排（严格）", False), ("重排（同节）", True)]:
-        metrics, _ = evaluate(rerank_search, reachable, K, section=sec)
-        line = "  ".join(f"{m} {v:.1%}" for m, v in metrics.items())
-        print(f"{label:10s} {line}")
+    # # 严格规则 vs 同节规则：同一节被切成几块时，别的块也能回答问题，严格规则会误判
+    # for label, sec in [("重排（严格）", False), ("重排（同节）", True)]:
+    #     metrics, _ = evaluate(rerank_search, reachable, K, section=sec)
+    #     line = "  ".join(f"{m} {v:.1%}" for m, v in metrics.items())
+    #     print(f"{label:10s} {line}")
+
+    test = [it for it in items if it["split"] == "test"]
+    test_ok = [it for it in test
+               if any(c["source"] == it["source"] and it["evidence"] in c["text"] for c in chunks)]
+    print(f"\ntest 共 {len(test)} 题，可达 {len(test_ok)} 题")
+
+    for name, fn in [("语义（基线）", search), ("BM25", bm25_search), ("重排（最终）", rerank_search)]:
+        t0 = time.perf_counter()  # 开始计时
+        hit_lists = [fn(it["question"], k=K) for it in test_ok]  # 检索只跑一次，结果存起来
+        avg = (time.perf_counter() - t0) / len(test_ok)  # 平均每题耗时（秒）
+
+        for rule, sec in [("严格", False), ("同节", True)]:  # 同一份结果，用两种规则打分
+            ranks = [find_rank(h, it, sec) for h, it in zip(hit_lists, test_ok)]
+            n = len(ranks)
+            hits = "  ".join(f"Hit@{c} {sum(1 for r in ranks if r is not None and r <= c) / n:.1%}"
+                             for c in (1, 3, 5, 10))
+            mrr = sum(1 / r for r in ranks if r is not None) / n
+            print(f"{name:8s} {rule}  {hits}  MRR {mrr:.1%}")
+        print(f"{name:8s} 平均每题 {avg:.2f} 秒")
