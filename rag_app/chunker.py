@@ -1,5 +1,4 @@
 from pathlib import Path   # pathlib：用"对象"的方式处理路径，比拼字符串可靠
-from pathlib import Path
 import re
 
 from rag_app.config import MAX_CHARS, MAX_CODE  # 切块参数统一从 config 读取
