@@ -1,10 +1,11 @@
-from ast import List
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 import httpx
 from rag_app.retriever import Retriever
 from rag_app.rag import answer
+from fastapi.responses import FileResponse
+import pathlib
 
 class AskRequest(BaseModel):
     question: str = Field(max_length=500, min_length=1)
@@ -25,6 +26,8 @@ async def lifespan(app: FastAPI):
     app.state.retriever = Retriever()
     yield
 
+INDEX_HTML = pathlib.Path(__file__).parent/"static"/"index.html"
+
 app = FastAPI(title="Hello-Agents RAG 问答", lifespan=lifespan)
 
 @app.get("/health")
@@ -37,6 +40,10 @@ def health():
     # 没有：返回 {"status": "loading"}
     else:
         return {"status": "loading"}
+
+@app.get("/",include_in_schema=False)
+def index():
+    return FileResponse(INDEX_HTML)
 
 @app.post("/ask", response_model=AskResponse)
 def ask(req: AskRequest):                         # 普通 def：answer 是慢的同步操作，FastAPI 会放进线程池执行

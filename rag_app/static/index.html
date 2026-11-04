@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<!-- 声明：这是一个现代 HTML 网页 -->
+<html lang="zh-CN">
+<head>
+    <!-- 【第 1 步】字符编码 UTF-8，避免中文乱码 -->
+    <meta charset="utf-8">
+    <!-- 【第 1 步】网页标题，显示在浏览器标签页上 -->
+    <title>Hello-Agents RAG 问答</title>
+
+    <!-- 【第 6 步】从 CDN 引入两个库（锁定大版本号）；必须在我们自己的 script 之前加载 -->
+    <!-- marked：把 Markdown 转成 HTML（排版员） -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@15/marked.min.js"></script>
+    <!-- DOMPurify：清洗 HTML，删掉脚本等危险内容（安检员） -->
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+
+    <!-- 【第 7 步】最基本的样式：区分不同类型的消息（CSS 的注释写法是 /* */） -->
+    <style>
+        body { max-width: 800px; margin: 20px auto; font-family: sans-serif; }   /* 内容居中，限制最大宽度 */
+        .msg { margin: 8px 0; padding: 8px 12px; border-radius: 6px; }          /* 每条消息的间距和圆角 */
+        .user { background: #e8f0fe; }                                           /* 用户的问题：浅蓝背景 */
+        .assistant { background: #f5f5f5; }                                      /* 回答：浅灰背景 */
+        .assistant p { margin: 4px 0; }                                          /* 回答里的段落间距小一点 */
+        .source { color: #555; font-size: 14px; padding: 2px 12px; margin: 0; }  /* 出处：灰色小字 */
+        .error { background: #fdecea; color: #b3261e; }                          /* 错误提示：红色 */
+        #ask-form { display: flex; gap: 8px; margin-top: 12px; }                 /* 输入框和按钮排成一行 */
+        #question { flex: 1; padding: 6px; }                                     /* 输入框占满剩余宽度 */
+    </style>
+</head>
+<body>
+    <!-- 【第 1 步】页面大标题 -->
+    <h1>Hello-Agents RAG 问答</h1>
+
+    <!-- 【第 2 步】消息区：所有问答都追加到这里，一开始是空的 -->
+    <div id="message"></div>
+
+    <!-- 【第 2 步】表单：输入框 + 发送按钮 -->
+    <form id="ask-form">
+        <!-- 输入框：placeholder 是灰色提示文字；maxlength 和后端的 max_length=500 保持一致 -->
+        <input id="question" placeholder="请输入关于 Hello-Agents 的问题" maxlength="500">
+        <!-- 发送按钮：type="submit" 表示点击时提交表单；id 用于第 7 步禁用按钮 -->
+        <button id="send-btn" type="submit">发送</button>
+    </form>
+
+    <script>
+        // ===== 【第 3 步】按 id 取出要用到的页面元素 =====
+        const input = document.getElementById("question");       // 输入框
+        const form = document.getElementById("ask-form");        // 表单
+        const button = document.getElementById("send-btn");      // 【第 7 步】发送按钮，等待时禁用
+        const messageBox = document.getElementById("message");   // 【第 5 步】消息区
+
+        // ===== 【第 5 步】辅助函数：在消息区追加一条纯文本消息 =====
+        // text：要显示的文字；className：样式类名（user / source / error / assistant）
+        function addMessage(text, className) {
+            const div = document.createElement("div");   // 新建一个空 div（空白便利贴）
+            div.className = "msg " + className;          // 【第 7 步】设置样式类名，例如 "msg user"
+            div.textContent = text;                      // 写入文字：textContent 原样显示，不执行 HTML，安全
+            messageBox.appendChild(div);                 // 放进消息区的最后面（贴上留言墙）
+            return div;                                  // 返回这个 div，方便之后删除（如“思考中…”）
+        }
+
+        // ===== 【第 6 步】辅助函数：显示需要 Markdown 排版的回答 =====
+        // 和 addMessage 只有一行不同：用 innerHTML + 排版 + 安检，代替 textContent
+        function addAnswer(markdown) {
+            const div = document.createElement("div");   // 新建一个空 div
+            div.className = "msg assistant";             // 回答的样式
+            // 先 marked.parse 排版（Markdown → HTML），再 DOMPurify.sanitize 安检；安检必须是最后一道
+            div.innerHTML = DOMPurify.sanitize(marked.parse(markdown));
+            messageBox.appendChild(div);                 // 放进消息区
+            return div;
+        }
+
+        // ===== 【第 7 步】辅助函数：把出错的响应变成一句人能看懂的话 =====
+        // status：状态码；data：解析出的 JSON（不是 JSON 时为 null）；text：响应的原始文字
+        function formatError(status, data, text) {
+            // 422（参数校验失败）：detail 是数组，每一项的 msg 是错误说明
+            if (data && Array.isArray(data.detail)) {
+                const msgs = data.detail.map(e => e.msg).join("；");   // 取出每一项的 msg，用分号连起来
+                return `请求参数有误（${status}）：${msgs}`;
+            }
+            // 502 等（我们自己 raise 的 HTTPException）：detail 是字符串
+            if (data && typeof data.detail === "string") {
+                return `服务出错（${status}）：${data.detail}`;
+            }
+            // 500 等：响应不是 JSON（如纯文本 Internal Server Error），显示原文的前 200 个字
+            return `服务出错（${status}）：${text.slice(0, 200)}`;
+        }
+
+        // ===== 【第 3~7 步】表单提交时执行：发送问题，显示回答、出处或错误 =====
+        async function handleSubmit(event) {
+            event.preventDefault();                        // 【第 3 步】拦住 form 的老习惯：不刷新页面
+
+            const question = input.value.trim();           // 【第 5 步】先把问题存起来；trim() 去掉首尾空格
+            if (question === "") {                         // 【第 7 步】空问题不发送，直接结束
+                return;
+            }
+
+            addMessage("你：" + question, "user");          // 【第 5 步】立刻显示用户的问题
+            input.value = "";                              // 【第 5 步】清空输入框
+
+            // 【第 7 步】等待状态：显示“思考中…”，禁用按钮防止重复提交
+            const thinking = addMessage("思考中…", "assistant");
+            button.disabled = true;
+
+            try {
+                // 【第 4 步】把问题发给 /ask
+                const res = await fetch("/ask", {
+                    method: "POST",                                   // 请求方法
+                    headers: { "Content-Type": "application/json" },  // 告诉服务器：body 是 JSON
+                    body: JSON.stringify({ question: question }),     // 把 {question: 问题} 转成 JSON 字符串
+                });
+
+                // 【第 7 步】先把响应当成普通文字读出来，再尝试按 JSON 解析（500 返回的是纯文本，不是 JSON）
+                const text = await res.text();
+                let data = null;                           // 解析失败时保持 null
+                try {
+                    data = JSON.parse(text);               // 相当于 Python 的 json.loads
+                } catch {
+                    data = null;                           // 不是 JSON，什么都不做
+                }
+
+                // 【第 7 步】先看盒子上的标签：状态码不是 2xx，就显示错误并结束
+                if (!res.ok) {
+                    addMessage(formatError(res.status, data, text), "error");
+                    return;                                // 结束函数；下面的 finally 仍然会执行
+                }
+
+                // 【第 6 步】显示回答：Markdown 排版 + 安检
+                addAnswer(data.answer);
+
+                // 【第 7 步】回答里引用了不存在的资料编号时，给出提示
+                if (data.bad_citations.length > 0) {
+                    addMessage("⚠ 回答中有不存在的引用编号：" + data.bad_citations.join(", "), "error");
+                }
+
+                // 【第 5 步】逐条显示出处：[编号] 文件 › 标题（分数保留 4 位小数）
+                let n = 1;                                 // 编号从 1 开始；会变化，所以用 let
+                for (const s of data.sources) {
+                    addMessage(`[${n}] ${s.source} › ${s.heading}（${s.score.toFixed(4)}）`, "source");
+                    n++;                                   // 编号加 1
+                }
+            } catch (err) {
+                // 【第 7 步】网络不通（服务没启动、断网）时 fetch 会抛错，进到这里
+                console.error(err);                        // 在控制台打印完整的错误，方便调试
+                addMessage("请求失败（服务可能没有启动，或网络断开）：" + err.message, "error");
+            } finally {
+                // 【第 7 步】无论成功、HTTP 错误还是网络错误，最后都要执行（离开房间关灯）
+                thinking.remove();                         // 删掉“思考中…”
+                button.disabled = false;                   // 恢复按钮
+                input.focus();                             // 光标回到输入框，方便继续提问
+            }
+        }
+
+        // 【第 3 步】表单被提交时，执行 handleSubmit（函数名后面不加括号）
+        form.addEventListener("submit", handleSubmit);
+    </script>
+</body>
+</html>
