@@ -219,7 +219,7 @@ RAG_RERANK_MAX_LEN=512
 |---|---|
 | `GET /` | 聊天页面（浏览器打开 http://127.0.0.1:8000/ ） |
 | `GET /docs` | FastAPI 自动生成的接口文档 |
-| `GET /health` | 返回 `{"status": "ok"}`；模型未加载完时为 `{"status": "loading"}` |
+| `GET /health` | 健康检查，返回 `{"status": "ok"}` |
 | `POST /ask` | 提问，见下 |
 
 **`POST /ask`**
@@ -286,7 +286,7 @@ for i, s in enumerate(data["sources"], 1):
 
 **本地运行**（在项目根目录执行）：
 
-1. 创建虚拟环境并安装依赖
+1. 创建虚拟环境并安装依赖（本项目使用 **Python 3.14**）
 
    ```bash
    python -m venv .venv
@@ -298,23 +298,62 @@ for i, s in enumerate(data["sources"], 1):
 
    （Windows：`.venv\Scripts\activate`）
 
+   先单独安装固定版本的 torch（`torch==2.14.1`）。Windows 上直接从 PyPI 安装即可，PyPI 上的 Windows 版就是 CPU 版：
+
    ```bash
-   pip install torch
+   pip install torch==2.14.1
    ```
+
+   Linux 上要加 `--index-url`，否则会装上体积很大的 GPU 版：
+
+   ```bash
+   pip install torch==2.14.1 --index-url https://download.pytorch.org/whl/cpu
+   ```
+
+   再安装项目一的其他依赖：
 
    ```bash
    pip install -r rag_app/requirements.txt
    ```
 
-2. 准备语料：从 [Hello-Agents](https://github.com/datawhalechina/hello-agents) 下载中文版 Markdown 文件，放到 `data/hello-agents-zh/`（`build_index.py` 会递归读取其中所有 `*.md`）
+   > 根目录的 `requirements.txt` 是第 1~7 周练习的完整依赖，项目一只需要 `rag_app/requirements.txt`。
+
+2. 准备语料
+
+   来源：Datawhale 开源教程 Hello-Agents（《从零开始构建智能体》），仓库 https://github.com/datawhalechina/hello-agents ，本项目使用的是 **2026-10-14** 的版本。
+
+   1) 克隆仓库：
+
+      ```bash
+      git clone https://github.com/datawhalechina/hello-agents
+      ```
+
+   2) 把正文 16 章的中文版 `docs/chapterN/第N章*.md` 复制到 `data/hello-agents-zh/main/`
+   3) 把扩展章节 14 篇 `Extra-Chapter/Extra*.md` 复制到 `data/hello-agents-zh/extra/`
+   4) 把仓库的 `LICENSE.txt` 复制到 `data/hello-agents-zh/`
+   5) 不需要英文版、示例代码目录和图片
+
+   最终结构：
+
+   ```
+   data/hello-agents-zh/
+   ├── main/          正文 16 章（中文版）
+   ├── extra/         扩展章节 14 篇
+   ├── LICENSE.txt    许可证（CC BY-NC-SA 4.0）
+   └── SOURCE.md      来源和版本说明（可选；chunker 会自动跳过这个文件）
+   ```
+
+   > 语料采用 CC BY-NC-SA 4.0 许可，所以不提交到本仓库，`data/` 已在 `.gitignore` 中。
+   > 上游仓库会继续更新，用最新版本建库时，切块数量可能和本 README 里的 2505 块不完全一致。
 
 3. 在项目根目录新建 `.env`，写入 DeepSeek Key（变量名以 [`rag_app/llm.py`](rag_app/llm.py) 为准）：
 
    ```
-   DEEPSEEK_API_KEY=你的DeepSeek密钥
+   DEEPSEEK_API_KEY=your-deepseek-api-key
    ```
 
-   > `.env` 已在 `.gitignore` 中，不要提交；值不要加引号。
+   可以直接复制 [`.env.example`](.env.example) 再改。
+   > `.env` 已在 `.gitignore` 中，不要提交。`.env` 中的值**不要加引号**（`docker run --env-file` 不会去掉引号，引号会被当成 Key 的一部分）。
 
 4. 建库（语料或切块规则改了才需要重新运行；第一次运行前请先看下面关于模型下载的说明）：
 
