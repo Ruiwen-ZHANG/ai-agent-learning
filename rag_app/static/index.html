@@ -141,7 +141,7 @@
             } catch (err) {
                 // 【第 7 步】网络不通（服务没启动、断网）时 fetch 会抛错，进到这里
                 console.error(err);                        // 在控制台打印完整的错误，方便调试
-                addMessage("请求失败（服务可能没有启动，或网络断开）：" + err.message, "error");
+                addMessage("请求失败：" + err.message, "error");    // 中性提示：catch 会接住 try 里所有错误，不只是网络错误
             } finally {
                 // 【第 7 步】无论成功、HTTP 错误还是网络错误，最后都要执行（离开房间关灯）
                 thinking.remove();                         // 删掉“思考中…”
