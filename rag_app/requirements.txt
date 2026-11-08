@@ -1,0 +1,18 @@
+# rag_app 在 Docker 里运行所需的第三方库
+# 版本号和本机一致（pip show 查到的），尤其是 chromadb，版本不同可能读不了 chroma_db
+# torch 不写在这里：Dockerfile 里单独安装 CPU 版
+
+# Web 服务：FastAPI 框架、启动器 uvicorn、数据校验 pydantic
+fastapi==0.141.1
+uvicorn==0.52.4
+pydantic==2.13.5
+
+# 调用 DeepSeek：HTTP 客户端、从 .env 读取环境变量
+httpx==0.28.1
+python-dotenv==1.2.3
+
+# 检索：向量库、中文分词、BM25、向量模型和重排模型
+chromadb==1.5.9
+jieba==0.42.1
+rank-bm25==0.2.2
+sentence-transformers==6.2.0

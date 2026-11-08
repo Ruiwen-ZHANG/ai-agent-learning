@@ -1,0 +1,24 @@
+# 只对 rag_app/Dockerfile 生效；用了它，根目录的 .dockerignore（第 3 周的）就不会再被读取
+# 写在这里的文件和文件夹不会被发送给 Docker，也就不可能进入镜像
+# 注释必须单独占一行
+
+# 密钥：绝不能进入镜像，运行时用 docker run --env-file .env 从外面传入
+.env
+
+# 虚拟环境：几个 GB，而且是 Windows 版的，Linux 容器里用不了
+.venv/
+
+# Git 历史和 PyCharm 配置
+.git/
+.idea/
+
+# Hello-Agents 语料：许可不允许公开分发；容器直接用 chroma_db，不需要语料
+data/
+
+# 第 1~7 周的练习代码，以及 cli.py 用到的 common 文件夹（容器里不运行 cli.py）
+week*/
+common/
+
+# Python 缓存文件（任意层级）
+**/__pycache__/
+**/*.pyc
