@@ -600,7 +600,7 @@ DOMPurify.sanitize(marked.parse('<img src=x onerror="alert(1)">'))   → onerror
 </html>
 ```
 
-> **后来改动**：检验题讲解时发现，catch 会接住 try 里**所有**的错误（不只是网络错误），上面这句"服务可能没有启动"在 marked 没加载、formatError 出错时会误导用户。之后把提示改成了中性说法（"请求失败：" + err.message），提交为 `fix(week8): neutral error message in catch`。具体措辞以仓库为准。
+> **待改**：检验题讲解时发现，catch 会接住 try 里**所有**的错误（不只是网络错误），上面这句"服务可能没有启动"在 marked 没加载、formatError 出错时会误导用户，应改成中性说法，例如 `addMessage("请求失败：" + err.message, "error");`。提交 `58d6bc7 fix(week8): neutral error message in catch` 实际**只改了文件末尾的换行**，提示文字还没有改（见错误 29），仓库里的代码和上面完全一致。
 
 ### 4.7 运行结果
 
@@ -1316,6 +1316,7 @@ def index():
 | 26 | GitHub 上传错了截图 | 同名文件直接上传覆盖；如果错图里有隐私，删除文件也抹不掉 Git 历史 |
 | 27 | `Ctrl+Alt+L` 格式化没反应 | 快捷键疑似被其他软件（QQ、输入法等）占用；改用菜单"代码 → 重新格式化代码"，或选中后 Tab / Shift+Tab 手动缩进 |
 | 28 | Docker 检验题 4：以为 COPY 复制的是"改动之前的代码" | 每次 build 都读最新文件；层缓存管的是"这一步要不要重做"，上面一层变了，下面全部重做 |
+| 29 | 提交 `58d6bc7 fix(week8): neutral error message in catch`，但 `git show 58d6bc7` 显示只改了 1 行：文件末尾补了一个换行（`\ No newline at end of file` 消失），catch 的提示文字没变 | 很可能是改完没保存，或改在了别的地方。**提交前先看 `git diff`**，确认改动和提交说明一致；提交说明写的是"做了什么"，不是"打算做什么" |
 
 ### 本周反复出现的模式
 
@@ -1325,6 +1326,7 @@ def index():
 | 照抄说明 / 占位文字 | 3（"名字"、"这里写你想打印的文字"、"你的form变量"） | 看到中文词出现在代码里，先问自己"这是要我替换的吗" |
 | 标签或括号没关 | 2 | 写开始标签时顺手写结束标签，再往中间填内容 |
 | 灰色 = 没用到 | 2（`from ast import List`、`FileResponse`） | 灰色的 import 往往说明代码写错了地方 |
+| 以为改了，其实没改 | 2（catch 提示文字、/health 多余的 hasattr 行） | 提交前 `git diff` 看一眼；改完在浏览器或终端里验证一次 |
 
 ### 讲解方的错误与更正
 
@@ -1334,7 +1336,7 @@ def index():
 | 结构清单里用中文写占位说明（"名字"、"这里写你想打印的文字"、"你的form变量"） | 看起来像代码，导致照抄（错误 9、10）。之后改用【】标出要替换的部分 |
 | 第 3 小步举例用了函数名 `loadData` | 被照用了；含义是"加载数据"，和"处理提交"不符，改为 `handleSubmit` |
 | 检验题"把 marked 挪到自己的 script 下面"预设了一定会报错 | 一般不会出错：marked 只在函数里用，调用时早已加载。只有顶层代码直接使用或 CDN 太慢时才报错 |
-| index.html 里 catch 的提示写成"服务可能没有启动，或网络断开" | 太绝对：catch 会接住 try 里所有错误（marked 未加载、formatError 出错等），会误导用户。已改为中性提示 |
+| index.html 里 catch 的提示写成"服务可能没有启动，或网络断开" | 太绝对：catch 会接住 try 里所有错误（marked 未加载、formatError 出错等），会误导用户。应改为中性提示（仓库里还没改，见错误 29） |
 | §2 设计 /health 在模型未加载完时返回 loading | uvicorn 要等 lifespan 完成才接收请求，loading 分支永远执行不到 |
 
 ---
@@ -1446,25 +1448,34 @@ Claude Code 新建分支并开 PR → 在 Files changed 里检查 → 网页上�
 ## 附录 C：提交记录
 
 ```
-5c5eec0  rag_app：整理成独立项目
-93cec80  fix：chunker 重复 import
-（§0 延迟实验、§2 FastAPI 服务）
-feat(week8): chat web page - GET / serves static/index.html; fetch /ask with markdown rendering, sources and error handling
-fix(week8): neutral error message in catch - show err.message instead of assuming network failure
-feat(week8): Dockerize rag_app - CPU torch, models baked into image, chroma_db copied, key via --env-file
-docs(week8): add full project 1 (Hello-Agents RAG) introduction to README        ← Claude Code，PR #2
-docs(week8): add chat page screenshot                                             ← 网页上传
-docs(week8): replace with correct chat page screenshot                            ← 网页覆盖
-docs: note in .env.example that week1/demo_env.py reads API_KEY                   ← Claude Code
-Merge pull request #2 from Ruiwen-ZHANG/docs/week8-readme
+8a3a155  feat(week8): rerank latency experiment; deploy config pool10+len256 (test Hit@3 87.5->81.2, 10.4s->3.9s)
+5c5eec0  feat(rag_app): standalone project - config, Retriever class with lazy loading, cli
+7d72996  chore: convert requirements.txt to UTF-8, pin sentence-transformers, add requests; dedupe .gitignore   ← Claude Code，PR #1
+5776b0e  docs: rewrite README with 16-week roadmap, directory guide, project 1 metrics and tech stack      ← Claude Code，PR #1
+18b279e  Merge pull request #1 from Ruiwen-ZHANG/claude/update-readme-568lqg
+93cec80  fix(rag_app): remove duplicate import in chunker
+bf79b47  Merge branch 'main' of https://github.com/Ruiwen-ZHANG/ai-agent-learning
+7f31fc7  feat(rag_app): FastAPI service with /health and /ask, lifespan model loading, 502 on LLM failure
+2f0abe3  feat(week8): chat web page - GET / serves static/index.html; fetch /ask with markdown rendering, sources and error handling
+e4733b2  feat(week8): Dockerize rag_app - CPU torch, models baked into image, chroma_db copied, key via --env-file
+58d6bc7  fix(week8): neutral error message in catch - show err.message instead of assuming network failure   ← 实际只补了文件末尾换行（错误 29）
+d7323b7  docs(week8): add full project 1 (Hello-Agents RAG) introduction to README                        ← Claude Code，PR #2
+3ef31a7  docs(week8): add chat page screenshot                                                             ← 网页上传
+7d7a722  docs(week8): fix chat page screenshot                                                             ← 网页覆盖
+3089b98  docs(week8): corpus download steps, pinned torch install, unify DEEPSEEK_API_KEY                  ← Claude Code，PR #2
+7fb7754  docs: note in .env.example that week1/demo_env.py reads API_KEY                                  ← Claude Code，PR #2
+a46341c  Merge pull request #2 from Ruiwen-ZHANG/docs/week8-readme
+1e7e93b  docs: week8 summary - project 1 deployment
 ```
 
-（以实际提交为准。）
+（来自仓库 `git log`，从旧到新。）
 
 ---
 
 ## 遗留任务
 
+- **catch 提示文字**：index.html 第 144 行改成中性提示，`git diff` 确认后提交（错误 29）
+- **/health 多余的一行**：api.py 第 36 行单独的 `hasattr(app.state,"retriever")` 还在，可以删掉；loading 分支也执行不到
 - **部署到云服务器**：拿到公网地址（至少 2 核 4 GB，安全组放行端口）。上线前先做防刷：DeepSeek 少充值、IP 限流、每日上限，必要时加访问口令
 - **流式输出**：现在要等 3~4 秒整段显示；第 3 周学过 SSE，可以让回答一个字一个字出来
 - **CDN 本地化**：把 marked、DOMPurify 下载到 static/，国内访问更稳定，也能消除 Edge 的跟踪防护警告
